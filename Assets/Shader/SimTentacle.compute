@@ -1,0 +1,80 @@
+﻿#pragma kernel CSSpring
+
+#include "Noise.hlsl"
+#define  SEGMENT_COUNT 64
+
+// Property Field
+RWStructuredBuffer<float3> _PositionBuffer;
+RWStructuredBuffer<float3> _VelocityBuffer;
+
+RWStructuredBuffer<float3> _RootBuffer;
+
+float _Length;
+float _Spring;
+float _Damping;
+float3 _Gravity;
+float _noiseScale;
+float _noiseAmplitude;
+float _noiseSpeed;
+float _LengthRandomness;
+
+float4x4 _RotationMat;
+
+float _t;
+float _dt;
+float _Seed;
+
+static const float eps = .00001;
+
+// Kernel
+[numthreads(SEGMENT_COUNT, 1, 1)]
+void CSSpring (uint3 dtid : SV_DispatchThreadID,
+               uint3 gtid : SV_GroupThreadID,
+               uint3 gid  : SV_GroupID)
+{
+    float rnd = random(float2(gid.x, _Seed));
+	float sLength = (1 - rnd * _LengthRandomness) * _Length / (float)SEGMENT_COUNT;
+
+    float3 rootP = mul(_RootBuffer[gid.x], (float3x3)_RotationMat);
+
+    if(gtid.x == 0)
+	{
+		_PositionBuffer[dtid.x] = rootP;
+	}
+	else if(gtid.x == 1)
+	{
+		float3 p = rootP;
+		
+		p += normalize(rootP) * sLength;
+		_PositionBuffer[dtid.x] = p;
+	}
+	else
+	{
+		float3 p1 = _PositionBuffer[dtid.x - 1];
+		float3 p4 = _PositionBuffer[dtid.x - min(gtid.x, 4)];
+		float3 pt = p1 + normalize(p1 - (p4+eps)) * sLength;
+		
+		float3 pn = _PositionBuffer[dtid.x] + _VelocityBuffer[dtid.x] * _dt;
+		
+		float3 vel = normalize(pn - (p1+eps)) * sLength;
+		_PositionBuffer[dtid.x] = p1 + vel;
+		
+		float3 v = _VelocityBuffer[dtid.x] * exp(-_Damping * _dt);
+		
+		v += (pt - p1) * _dt * _Spring;
+		v += _Gravity * _dt;
+		v += snoise_grad(p1 * _noiseScale + _t * _noiseSpeed).xyz * _dt * _noiseAmplitude;
+		
+		_VelocityBuffer[dtid.x] = v;
+	}
+
+	/*
+	if(reset && gtid.x != 0){
+		float3 p = rootP;
+		p += normalize(rootP) * sLength;
+		_PositionBuffer[dtid.x] = p;
+		
+		_VelocityBuffer[dtid.x] = (float3)0;
+	}
+    */
+}

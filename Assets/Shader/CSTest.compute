@@ -1,0 +1,20 @@
+﻿#pragma kernel KernelFunctionA
+#pragma kernel KernelFunctionB
+
+RWStructuredBuffer<int> intBuffer;
+float value;
+
+[numthreads(4,1,1)]
+void KernelFunctionA (uint3 gid : SV_GroupID,
+             uint3 gtid : SV_GroupThreadID)
+{
+    intBuffer[gtid.x] = gtid.x * value;
+}
+
+[numthreads(4,1,1)]
+void KernelFunctionB (uint3 gid : SV_GroupID,
+             uint3 gtid : SV_GroupThreadID)
+{
+
+    intBuffer[gtid.x] += 1;
+}
